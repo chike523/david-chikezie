@@ -12,7 +12,13 @@ const date_format = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "s
 async function Entries() {
   // The wall changes with every signature, so it is always read at request time.
   await connection();
-  const { entries, total } = await listEntries();
+  const { entries, total, available } = await listEntries();
+
+  if (!available) {
+    return (
+      <p className="max-w-sm text-ink-2">The wall needs a database before signatures can show up here.</p>
+    );
+  }
 
   return (
     <div>

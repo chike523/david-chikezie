@@ -60,8 +60,12 @@ export function Hero() {
             {profile.photos.map((photo, index) => (
               <Polaroid key={photo.caption} photo={photo} index={index} />
             ))}
-            <p className="absolute -bottom-6 right-2 font-hand text-xl text-ink-2 sm:text-2xl" aria-hidden="true">
-              <span className="mr-1 inline-block -rotate-12">↘</span> that&rsquo;s me
+            <p className="absolute -bottom-7 right-1 flex items-end gap-1 font-hand text-xl text-ink-2 sm:right-2 sm:text-2xl" aria-hidden="true">
+              <svg viewBox="0 0 72 44" className="mb-1 h-9 w-14 shrink-0" fill="none" aria-hidden="true">
+                <path d="M64 36C42 36 30 24 16 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                <path d="M16 10l11 1.5M16 10l2.5 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              that&rsquo;s me
             </p>
           </Reveal>
         </div>

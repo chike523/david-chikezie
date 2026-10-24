@@ -1,22 +1,40 @@
 import { createClient, type Client } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
 /**
- * One libSQL client per process. Locally this is a file; in production it is Turso.
- * Set TURSO_DATABASE_URL (and TURSO_AUTH_TOKEN for remote databases) to point elsewhere.
+ * Locally this is a file. In production set TURSO_DATABASE_URL (and TURSO_AUTH_TOKEN).
+ * On Vercel a missing URL must stay closed: opening file:local.db throws and aborts the page.
  */
-const url = process.env.TURSO_DATABASE_URL ?? "file:local.db";
-const auth_token = process.env.TURSO_AUTH_TOKEN;
+function databaseUrl(): string | null {
+  const remote = process.env.TURSO_DATABASE_URL?.trim();
+  if (remote) return remote;
+  if (process.env.VERCEL) return null;
+  return "file:local.db";
+}
+
+/** False on Vercel until TURSO_DATABASE_URL is set. */
+export function databaseConfigured(): boolean {
+  return databaseUrl() !== null;
+}
 
 declare global {
   var __portfolio_libsql: Client | undefined;
 }
 
-const client = globalThis.__portfolio_libsql ?? createClient({ url, authToken: auth_token });
-if (process.env.NODE_ENV !== "production") globalThis.__portfolio_libsql = client;
+function client(): Client {
+  const url = databaseUrl();
+  if (!url) throw new Error("No database is configured.");
+  const existing = globalThis.__portfolio_libsql;
+  if (existing) return existing;
+  const created = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
+  globalThis.__portfolio_libsql = created;
+  return created;
+}
 
-export const db = drizzle(client, { schema });
+export function database(): LibSQLDatabase<typeof schema> {
+  return drizzle(client(), { schema });
+}
 
 let schema_ready: Promise<void> | undefined;
 
@@ -37,12 +55,13 @@ const CREATE_GUESTBOOK = [
  * because those rows cannot be drawn.
  */
 async function prepareSchema(): Promise<void> {
-  const info = await client.execute("select name from pragma_table_info('guestbook_entries')");
+  const connection = client();
+  const info = await connection.execute("select name from pragma_table_info('guestbook_entries')");
   const columns = info.rows.map((row) => String(row.name));
   if (columns.length > 0 && !columns.includes("strokes")) {
-    await client.execute("drop table guestbook_entries");
+    await connection.execute("drop table guestbook_entries");
   }
-  await client.batch(CREATE_GUESTBOOK, "write");
+  await connection.batch(CREATE_GUESTBOOK, "write");
 }
 
 export function ensureSchema(): Promise<void> {

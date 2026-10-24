@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
-import { db, ensureSchema } from "@/lib/db";
+import { database, databaseConfigured, ensureSchema } from "@/lib/db";
 import { guestbook_entries } from "@/lib/db/schema";
 import { GUESTBOOK_LIMITS, parseStrokes, type Stroke } from "@/lib/guestbook/shared";
 
@@ -15,32 +15,41 @@ export function hashIp(ip: string): string {
   return createHash("sha256").update(`${salt}:${ip}`).digest("hex");
 }
 
-export async function listEntries(): Promise<{ entries: PublicEntry[]; total: number }> {
-  await ensureSchema();
-  const [rows, [{ total }]] = await Promise.all([
-    db
-      .select({
-        id: guestbook_entries.id,
-        strokes: guestbook_entries.strokes,
-        created_at: guestbook_entries.created_at,
-      })
-      .from(guestbook_entries)
-      .orderBy(desc(guestbook_entries.created_at), desc(guestbook_entries.id))
-      .limit(GUESTBOOK_LIMITS.page_size),
-    db.select({ total: sql<number>`count(*)` }).from(guestbook_entries),
-  ]);
+export async function listEntries(): Promise<{ entries: PublicEntry[]; total: number; available: boolean }> {
+  if (!databaseConfigured()) return { entries: [], total: 0, available: false };
 
-  const entries: PublicEntry[] = [];
-  for (const row of rows) {
-    const parsed = parseStrokes(row.strokes);
-    if (!parsed.ok) continue;
-    entries.push({ id: row.id, strokes: parsed.strokes, created_at: row.created_at });
+  try {
+    await ensureSchema();
+    const db = database();
+    const [rows, [{ total }]] = await Promise.all([
+      db
+        .select({
+          id: guestbook_entries.id,
+          strokes: guestbook_entries.strokes,
+          created_at: guestbook_entries.created_at,
+        })
+        .from(guestbook_entries)
+        .orderBy(desc(guestbook_entries.created_at), desc(guestbook_entries.id))
+        .limit(GUESTBOOK_LIMITS.page_size),
+      db.select({ total: sql<number>`count(*)` }).from(guestbook_entries),
+    ]);
+
+    const entries: PublicEntry[] = [];
+    for (const row of rows) {
+      const parsed = parseStrokes(row.strokes);
+      if (!parsed.ok) continue;
+      entries.push({ id: row.id, strokes: parsed.strokes, created_at: row.created_at });
+    }
+    return { entries, total: Number(total), available: true };
+  } catch (error) {
+    console.error("guestbook list failed", error);
+    return { entries: [], total: 0, available: false };
   }
-  return { entries, total: Number(total) };
 }
 
 export async function recentlySigned(ip_hash: string, now: Date): Promise<boolean> {
   await ensureSchema();
+  const db = database();
   const since = new Date(now.getTime() - GUESTBOOK_LIMITS.cooldown_ms);
   const rows = await db
     .select({ id: guestbook_entries.id })
@@ -52,7 +61,7 @@ export async function recentlySigned(ip_hash: string, now: Date): Promise<boolea
 
 export async function insertEntry(input: { strokes: Stroke[]; ip_hash: string; now: Date }): Promise<void> {
   await ensureSchema();
-  await db.insert(guestbook_entries).values({
+  await database().insert(guestbook_entries).values({
     strokes: JSON.stringify(input.strokes),
     ip_hash: input.ip_hash,
     created_at: input.now,

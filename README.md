@@ -41,7 +41,7 @@ Colours and fonts are set in `app/globals.css` (`:root` and `.dark`) and `app/la
 
 ## Guestbook and deployment
 
-The guestbook uses Drizzle ORM over libSQL. With no environment variables it writes to `file:local.db`. For production, create a database on [Turso](https://turso.tech) and set:
+The guestbook uses Drizzle ORM over libSQL. With no environment variables it writes to `file:local.db` on your machine. On Vercel, leave those variables unset and the wall stays empty instead of opening a local file the server cannot use. For a shared wall, create a database on [Turso](https://turso.tech) and set:
 
 ```
 TURSO_DATABASE_URL=libsql://your-db-name.turso.io

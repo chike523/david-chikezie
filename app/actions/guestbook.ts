@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { refresh } from "next/cache";
 import { cleanText, parseStrokes, type GuestbookState } from "@/lib/guestbook/shared";
+import { databaseConfigured } from "@/lib/db";
 import { hashIp, insertEntry, recentlySigned } from "@/lib/guestbook/server";
 
 async function clientIp(): Promise<string> {
@@ -31,14 +32,17 @@ export async function signGuestbook(_previous: GuestbookState, form_data: FormDa
     return { status: "error", message: "Draw your signature first." };
   }
 
+  if (!databaseConfigured()) {
+    return { status: "error", message: "The wall isn't connected to a database yet." };
+  }
+
   const ip_hash = hashIp(await clientIp());
   const now = new Date();
 
-  if (await recentlySigned(ip_hash, now)) {
-    return { status: "error", message: "You signed a moment ago. Give it a minute before signing again." };
-  }
-
   try {
+    if (await recentlySigned(ip_hash, now)) {
+      return { status: "error", message: "You signed a moment ago. Give it a minute before signing again." };
+    }
     await insertEntry({ strokes: parsed.strokes, ip_hash, now });
   } catch (error) {
     console.error("guestbook insert failed", error);
